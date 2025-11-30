@@ -81,12 +81,10 @@ body {
 }
 
 @keyframes float {
-
     0%,
     100% {
         transform: translate(0, 0);
     }
-
     50% {
         transform: translate(30px, -30px);
     }
@@ -226,7 +224,6 @@ body {
         opacity: 0;
         transform: translateY(20px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);
@@ -415,13 +412,52 @@ select option {
     background: rgba(255, 255, 255, 0.15);
 }
 
-/* Responsive */
+/* =========================================
+   Responsive / Mobile Fixes
+   ========================================= */
 @media (max-width: 768px) {
-    .editor-area {
-        grid-template-columns: 1fr;
+    body {
+        /* Fixes content cut-off by removing vertical centering */
+        align-items: flex-start; 
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        height: auto; 
+    }
+
+    .app-container {
+        padding: 1rem;
+        max-width: 100%;
+    }
+
+    .glass-panel {
+        padding: 1.5rem;
+        width: 100%;
     }
 
     .app-header h1 {
         font-size: 2.2rem;
+    }
+
+    /* Stack editor columns vertically */
+    .editor-area {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+
+    .preview-wrapper {
+        padding: 0.5rem;
+    }
+    
+    /* Ensure image doesn't take too much vertical space on mobile */
+    #imagePreview {
+        max-height: 300px; 
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .btn-primary, .btn-secondary {
+        width: 100%;
     }
 }
