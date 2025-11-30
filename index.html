@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fem Converter - Premium Image Tool</title>
+    <meta name="description"
+        content="Convert images to JPG, PNG, WEBP with precise size control. Client-side, secure, and fast.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <main class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <i class="fa-solid fa-layer-group"></i>
+                <h1>Fem Converter</h1>
+            </div>
+            <p class="tagline">Transform your images with precision and elegance.</p>
+        </header>
+
+        <section class="converter-card glass-panel">
+            <!-- Upload Section -->
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-content">
+                    <div class="icon-wrapper">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <h3>Drag & Drop your image here</h3>
+                    <p>Supports JPG, PNG, WEBP, and more</p>
+                    <button class="btn-primary" id="browseBtn">
+                        <i class="fa-regular fa-folder-open"></i> Browse Files
+                    </button>
+                    <input type="file" id="fileInput" accept="image/*" hidden>
+                </div>
+            </div>
+
+            <!-- Editor Section (Hidden initially) -->
+            <div class="editor-area hidden" id="editorArea">
+                <div class="preview-wrapper">
+                    <img id="imagePreview" src="" alt="Preview">
+                    <div class="file-meta">
+                        <span id="fileName">filename.jpg</span>
+                        <span class="badge" id="originalSize">2.4 MB</span>
+                    </div>
+                </div>
+
+                <div class="controls-panel">
+                    <!-- Format Selection -->
+                    <div class="control-group">
+                        <label>Target Format</label>
+                        <div class="custom-select">
+                            <select id="formatSelect">
+                                <option value="image/jpeg">JPG</option>
+                                <option value="image/png">PNG</option>
+                                <option value="image/webp">WEBP</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                    </div>
+
+                    <!-- Target Size Input -->
+                    <div class="control-group" id="sizeControlGroup">
+                        <label>Target Size (KB)</label>
+                        <div class="input-with-badge">
+                            <input type="number" id="targetSizeInput" placeholder="Auto" min="1">
+                            <div class="size-limits" id="sizeLimits">
+                                <!-- Populated by JS: Min: 50KB | Max: 500KB -->
+                            </div>
+                        </div>
+                        <p class="help-text">Leave empty for maximum quality</p>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="action-buttons">
+                        <button class="btn-secondary" id="resetBtn">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                        <button class="btn-primary" id="convertBtn">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Convert & Download
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
