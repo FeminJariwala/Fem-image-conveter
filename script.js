@@ -12,16 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const sizeLimitsDisplay = document.getElementById('sizeLimits');
     const convertBtn = document.getElementById('convertBtn');
     const resetBtn = document.getElementById('resetBtn');
-    const sizeControlGroup = document.getElementById('sizeControlGroup');
 
     // State
     let currentFile = null;
-    let minSizeKB = 0;
-    let maxSizeKB = 0;
 
     // --- Event Listeners ---
-
-    // Drag & Drop
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, preventDefaults, false);
     });
@@ -31,31 +26,21 @@ document.addEventListener('DOMContentLoaded', () => {
         e.stopPropagation();
     }
 
-    ['dragenter', 'dragover'].forEach(() => {
-        dropZone.classList.add('drag-over');
-    });
-
-    ['dragleave', 'drop'].forEach(() => {
-        dropZone.classList.remove('drag-over');
-    });
+    ['dragenter', 'dragover'].forEach(() => dropZone.classList.add('drag-over'));
+    ['dragleave', 'drop'].forEach(() => dropZone.classList.remove('drag-over'));
 
     dropZone.addEventListener('drop', handleDrop);
-
-    // File Input
     browseBtn.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
-
-    // Controls
     resetBtn.addEventListener('click', resetApp);
-    formatSelect.addEventListener('change', handleFormatChange);
+    formatSelect.addEventListener('change', () => calculateSizeLimits());
     convertBtn.addEventListener('click', handleConversion);
 
-    // --- Functions ---
+    // --- Core Functions ---
 
     function handleDrop(e) {
         const dt = e.dataTransfer;
-        const files = dt.files;
-        handleFiles(files);
+        handleFiles(dt.files);
     }
 
     function handleFiles(files) {
@@ -78,14 +63,10 @@ document.addEventListener('DOMContentLoaded', () => {
             fileNameDisplay.textContent = file.name;
             originalSizeDisplay.textContent = formatBytes(file.size);
 
-            // Show editor, hide drop zone
             dropZone.classList.add('hidden');
             editorArea.classList.remove('hidden');
 
-            // Initialize size calculations once image is loaded
-            imagePreview.onload = () => {
-                calculateSizeLimits();
-            };
+            imagePreview.onload = () => calculateSizeLimits();
         };
     }
 
@@ -99,62 +80,54 @@ document.addEventListener('DOMContentLoaded', () => {
         sizeLimitsDisplay.classList.remove('visible');
     }
 
-    function handleFormatChange() {
-        calculateSizeLimits();
-    }
-
-    // Helper to setup canvas with white background
-    function getCanvasWithImage(img, format) {
+    // Helper: Creates canvas with White Background (fixes transparent PNG to JPG black issue)
+    function getCanvas(img, width, height, format) {
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true }); // Optimized for frequent reads
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        // FIX: Fill with white background if converting to JPG
-        // This prevents transparent areas from turning black or "fading"
+        // Enable high quality scaling
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
         if (format === 'image/jpeg') {
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, width, height);
         return canvas;
+    }
+
+    function estimateSizeKB(dataUrl) {
+        const head = 'data:image/*;base64,'.length;
+        return ((dataUrl.length - head) * 0.75) / 1024;
     }
 
     async function calculateSizeLimits() {
         if (!currentFile || !imagePreview.src) return;
-
         const format = formatSelect.value;
-        const canvas = getCanvasWithImage(imagePreview, format);
+        
+        // Use original dimensions for limits
+        const canvas = getCanvas(imagePreview, imagePreview.naturalWidth, imagePreview.naturalHeight, format);
 
-        // Check if format supports quality adjustment
         if (format === 'image/png') {
-            sizeLimitsDisplay.textContent = 'Size targeting not available for PNG';
+            sizeLimitsDisplay.textContent = 'PNG size targeting is limited';
             sizeLimitsDisplay.classList.add('visible');
-            targetSizeInput.disabled = true;
-            targetSizeInput.placeholder = "Not supported for PNG";
+            targetSizeInput.placeholder = "Not recommended for PNG";
             return;
         }
 
         targetSizeInput.disabled = false;
         targetSizeInput.placeholder = "Auto";
 
-        // Calculate Min Size (Quality 0.01)
-        const minDataUrl = canvas.toDataURL(format, 0.01);
-        minSizeKB = Math.round(estimateSizeKB(minDataUrl));
+        // Calculate theoretical limits at full resolution
+        const minSize = Math.round(estimateSizeKB(canvas.toDataURL(format, 0.05)));
+        const maxSize = Math.round(estimateSizeKB(canvas.toDataURL(format, 1.0)));
 
-        // Calculate Max Size (Quality 1.0)
-        const maxDataUrl = canvas.toDataURL(format, 1.0);
-        maxSizeKB = Math.round(estimateSizeKB(maxDataUrl));
-
-        sizeLimitsDisplay.textContent = `Min: ${minSizeKB}KB | Max: ${maxSizeKB}KB`;
+        sizeLimitsDisplay.textContent = `Est. Range: ${minSize}KB - ${maxSize}KB (will resize if smaller)`;
         sizeLimitsDisplay.classList.add('visible');
-    }
-
-    function estimateSizeKB(dataUrl) {
-        const head = 'data:image/*;base64,'.length;
-        const sizeInBytes = (dataUrl.length - head) * 0.75;
-        return sizeInBytes / 1024;
     }
 
     async function handleConversion() {
@@ -163,44 +136,55 @@ document.addEventListener('DOMContentLoaded', () => {
         const format = formatSelect.value;
         const targetSize = parseFloat(targetSizeInput.value);
         
-        // Use the helper to get a canvas with white background properly set
-        const canvas = getCanvasWithImage(imagePreview, format);
-
-        let quality = 0.92; // Default high quality
-
-        // If target size is specified and format supports it (JPG/WEBP)
+        let width = imagePreview.naturalWidth;
+        let height = imagePreview.naturalHeight;
+        let quality = 0.92;
+        let canvas = getCanvas(imagePreview, width, height, format);
+        
+        // --- SMART RESIZING LOGIC ---
+        // If a target size is set, we check if we need to shrink dimensions
         if (targetSize && format !== 'image/png') {
-            if (targetSize < minSizeKB) {
-                alert(`Target size is too low. Minimum possible is ${minSizeKB}KB. Using minimum quality.`);
-                quality = 0.01;
-            } else if (targetSize > maxSizeKB) {
-                quality = 1.0; 
-            } else {
-                // Binary search for optimal quality
-                let minQ = 0.01;
-                let maxQ = 1.0;
+            
+            // 1. Step Down Dimensions until quality > 0.1 is possible
+            // We loop: If the image at lowest quality (0.1) is STILL bigger than target,
+            // we shrink dimensions by 20% and try again.
+            let attempts = 0;
+            while (attempts < 10) {
+                const lowQualUrl = canvas.toDataURL(format, 0.1);
+                const estimatedLowSize = estimateSizeKB(lowQualUrl);
 
-                for (let i = 0; i < 15; i++) { // Increased iterations for precision
-                    let midQ = (minQ + maxQ) / 2;
-                    let dataUrl = canvas.toDataURL(format, midQ);
-                    let size = estimateSizeKB(dataUrl);
-
-                    if (Math.abs(size - targetSize) < 5) { 
-                        quality = midQ;
-                        break;
-                    }
-
-                    if (size > targetSize) {
-                        maxQ = midQ;
-                    } else {
-                        minQ = midQ;
-                    }
-                    quality = midQ;
+                if (estimatedLowSize <= targetSize) {
+                    break; // Fits! We can now tune quality.
                 }
+
+                // If too big, shrink dimensions
+                width *= 0.8; 
+                height *= 0.8;
+                canvas = getCanvas(imagePreview, width, height, format);
+                attempts++;
+            }
+
+            // 2. Binary Search for Quality (to hit exact size)
+            let minQ = 0.05;
+            let maxQ = 1.0;
+            
+            for (let i = 0; i < 10; i++) {
+                let midQ = (minQ + maxQ) / 2;
+                let dataUrl = canvas.toDataURL(format, midQ);
+                let size = estimateSizeKB(dataUrl);
+
+                if (Math.abs(size - targetSize) < (targetSize * 0.05)) { // 5% tolerance
+                    quality = midQ;
+                    break;
+                }
+                
+                if (size > targetSize) maxQ = midQ;
+                else minQ = midQ;
+                
+                quality = midQ;
             }
         }
 
-        // Convert
         const finalDataUrl = canvas.toDataURL(format, quality);
         downloadImage(finalDataUrl, format);
     }
@@ -208,9 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function downloadImage(dataUrl, format) {
         const link = document.createElement('a');
         const ext = format.split('/')[1];
-        // Create a cleaner filename
         const originalName = currentFile.name.split('.')[0];
-        link.download = `${originalName}_converted.${ext}`;
+        link.download = `${originalName}_fem_${Date.now()}.${ext}`;
         link.href = dataUrl;
         document.body.appendChild(link);
         link.click();
@@ -220,9 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function formatBytes(bytes, decimals = 2) {
         if (bytes === 0) return '0 Bytes';
         const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + ['Bytes', 'KB', 'MB', 'GB', 'TB'][i];
     }
 });
