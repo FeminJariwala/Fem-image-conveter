@@ -100,30 +100,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleFormatChange() {
-        const format = formatSelect.value;
-        // PNG doesn't support quality adjustment in toDataURL in many browsers/specs effectively for size targeting like JPG/WEBP
-        // But we will still try to calculate limits if possible, or hide the input if not applicable.
-        // For this implementation, we'll assume standard behavior: JPG/WEBP support quality.
-
         calculateSizeLimits();
+    }
+
+    // Helper to setup canvas with white background
+    function getCanvasWithImage(img, format) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true }); // Optimized for frequent reads
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+
+        // FIX: Fill with white background if converting to JPG
+        // This prevents transparent areas from turning black or "fading"
+        if (format === 'image/jpeg') {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        ctx.drawImage(img, 0, 0);
+        return canvas;
     }
 
     async function calculateSizeLimits() {
         if (!currentFile || !imagePreview.src) return;
 
         const format = formatSelect.value;
-
-        // Create a canvas to render the image
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = imagePreview.naturalWidth;
-        canvas.height = imagePreview.naturalHeight;
-        ctx.drawImage(imagePreview, 0, 0);
+        const canvas = getCanvasWithImage(imagePreview, format);
 
         // Check if format supports quality adjustment
         if (format === 'image/png') {
-            // PNG is lossless, quality param doesn't affect size in standard toDataURL
-            // We can't really target a size for PNG easily without external libraries or reducing resolution
             sizeLimitsDisplay.textContent = 'Size targeting not available for PNG';
             sizeLimitsDisplay.classList.add('visible');
             targetSizeInput.disabled = true;
@@ -147,7 +152,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function estimateSizeKB(dataUrl) {
-        // Base64 length * 0.75 is approx byte size
         const head = 'data:image/*;base64,'.length;
         const sizeInBytes = (dataUrl.length - head) * 0.75;
         return sizeInBytes / 1024;
@@ -158,32 +162,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const format = formatSelect.value;
         const targetSize = parseFloat(targetSizeInput.value);
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = imagePreview.naturalWidth;
-        canvas.height = imagePreview.naturalHeight;
-        ctx.drawImage(imagePreview, 0, 0);
+        
+        // Use the helper to get a canvas with white background properly set
+        const canvas = getCanvasWithImage(imagePreview, format);
 
-        let quality = 1.0;
+        let quality = 0.92; // Default high quality
 
-        // If target size is specified and format supports it
+        // If target size is specified and format supports it (JPG/WEBP)
         if (targetSize && format !== 'image/png') {
             if (targetSize < minSizeKB) {
                 alert(`Target size is too low. Minimum possible is ${minSizeKB}KB. Using minimum quality.`);
                 quality = 0.01;
             } else if (targetSize > maxSizeKB) {
-                quality = 1.0; // Can't go higher than max
+                quality = 1.0; 
             } else {
-                // Binary search for quality
+                // Binary search for optimal quality
                 let minQ = 0.01;
                 let maxQ = 1.0;
 
-                for (let i = 0; i < 10; i++) { // 10 iterations is usually enough precision
+                for (let i = 0; i < 15; i++) { // Increased iterations for precision
                     let midQ = (minQ + maxQ) / 2;
                     let dataUrl = canvas.toDataURL(format, midQ);
                     let size = estimateSizeKB(dataUrl);
 
-                    if (Math.abs(size - targetSize) < 5) { // Within 5KB tolerance
+                    if (Math.abs(size - targetSize) < 5) { 
                         quality = midQ;
                         break;
                     }
@@ -206,7 +208,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function downloadImage(dataUrl, format) {
         const link = document.createElement('a');
         const ext = format.split('/')[1];
-        link.download = `converted_${Date.now()}.${ext}`;
+        // Create a cleaner filename
+        const originalName = currentFile.name.split('.')[0];
+        link.download = `${originalName}_converted.${ext}`;
         link.href = dataUrl;
         document.body.appendChild(link);
         link.click();
